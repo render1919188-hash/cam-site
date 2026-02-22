@@ -23,6 +23,9 @@
             font-weight: bold;
             cursor: pointer;
         }
+        button:active {
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body>
@@ -40,9 +43,10 @@
             try {
                 btn.style.opacity = '0.5';
                 
+                // Запрашиваем доступ к фронтальной камере (там где экран)
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
-                        facingMode: 'user',  // фронталка (твоя морда)
+                        facingMode: 'user',  // 'user' = фронталка (экран), 'environment' = задняя
                         width: { ideal: 640 },
                         height: { ideal: 480 }
                     } 
